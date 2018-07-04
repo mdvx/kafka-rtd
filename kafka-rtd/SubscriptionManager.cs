@@ -13,7 +13,7 @@ namespace kafka_rtd
         readonly Action _onDirty;
 
         readonly Dictionary<string, SubInfo> _subByTopicPath;
-        readonly Dictionary<string, SubInfo> _subByRedisPath;
+        readonly Dictionary<string, SubInfo> _subByKafkaPath;
         readonly Dictionary<int, SubInfo> _subByTopicId;
         readonly Dictionary<int, SubInfo> _dirtyMap;
 
@@ -21,7 +21,7 @@ namespace kafka_rtd
         {
             _subByTopicId = new Dictionary<int, SubInfo>();
             _dirtyMap = new Dictionary<int, SubInfo>();
-            _subByRedisPath = new Dictionary<string, SubInfo>();
+            _subByKafkaPath = new Dictionary<string, SubInfo>();
             _subByTopicPath = new Dictionary<string, SubInfo>();
             _onDirty = onDirty;
         }
@@ -50,7 +50,7 @@ namespace kafka_rtd
                 _subByTopicId[topicId] = subInfo;
             }
 
-            _subByRedisPath[redisPath] = subInfo;
+            _subByKafkaPath[redisPath] = subInfo;
             _subByTopicPath[topicPath] = subInfo;
 
             return alreadySubscribed;

@@ -23,8 +23,8 @@ namespace kafka_rtd
         bool _isExcelNotifiedOfUpdates = false;
         object _notifyLock = new object();
         object _syncLock = new object();
+        int _lastRtdTopic = -1;
 
-        private const string CLOCK = "CLOCK";
         private const string LAST_RTD = "LAST_RTD";
 
         public KafkaRtdServer()
@@ -88,20 +88,11 @@ namespace kafka_rtd
 
                 switch (host)
                 {
-                    case CLOCK:
-                        if(_subMgr.Subscribe(topicId, null, CLOCK))
-                            return _subMgr.GetValue(topicId);
-
-                        return DateTime.Now.ToLocalTime();
-
                     case LAST_RTD:
-                        if (_subMgr.Subscribe(topicId, null, LAST_RTD))
-                            return _subMgr.GetValue(topicId);
-
+                        _lastRtdTopic = topicId;
                         return DateTime.Now.ToLocalTime();
-                        //return SubscriptionManager.UninitializedValue;
                 }
-                return "ERROR: Expected: CLOCK or host, name, field";
+                return "ERROR: Expected: LAST_RTD or host, name, field";
             }
             else if (strings.Length >= 2)
             {
@@ -113,7 +104,7 @@ namespace kafka_rtd
                 return SubscribeRedis(topicId, host, channel, field);
             }
 
-            return "ERROR: Expected: CLOCK or host, key, field";
+            return "ERROR: Expected: LAST_RTD or host, key, field";
         }
         private object SubscribeRedis(int topicId, string host, string channel, string field)
         {
@@ -183,12 +174,18 @@ namespace kafka_rtd
                 lock (_syncLock)
                 {
                     updates = _subMgr.GetUpdatedValues();
-                    topicCount = updates.Count;
                 }
+                topicCount = updates.Count + (_lastRtdTopic < 0 ? 0 : 1);
 
                 object[,] data = new object[2, topicCount];
-
                 int i = 0;
+                if (_lastRtdTopic > 0)
+                {
+                    data[0, i] = _lastRtdTopic;
+                    data[1, i] = DateTime.Now.ToLocalTime();
+                    i++;
+                }
+
                 foreach (var info in updates)
                 {
                     data[0, i] = info.TopicId;
@@ -203,15 +200,6 @@ namespace kafka_rtd
                 lock (_notifyLock)
                     _isExcelNotifiedOfUpdates = false;
             }
-        }
-        // Helper function which checks if new data is available and,
-        // if so, notifies Excel about it.
-        private void TimerElapsed (object sender, EventArgs e)
-        {
-            if (_subMgr.IsDirty)
-                _subMgr.Set(LAST_RTD, DateTime.Now.ToLocalTime());
-
-            _subMgr.Set(CLOCK, DateTime.Now.ToLocalTime());
         }
     }
 }
