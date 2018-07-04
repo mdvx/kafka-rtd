@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27703.2026
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "kafka-rtd", "kafka-rtd\kafka-rtd.csproj", "{36748CD2-5D54-4C76-A586-7683557A047F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{36748CD2-5D54-4C76-A586-7683557A047F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36748CD2-5D54-4C76-A586-7683557A047F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36748CD2-5D54-4C76-A586-7683557A047F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36748CD2-5D54-4C76-A586-7683557A047F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {108B352D-7121-4480-893B-5940C11EEE1F}
+	EndGlobalSection
+EndGlobal
