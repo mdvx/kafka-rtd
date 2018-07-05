@@ -32,11 +32,11 @@ namespace kafka_rtd
             }
         }
 
-        public bool Subscribe(int topicId, string host, string channel, string field=null)
+        public bool Subscribe(int topicId, Uri host, string channel, string field=null)
         {
-            var topicPath = FormatPath(host, channel, field);
+            var topicPath = FormatPath(host.ToString(), channel, field);
             var alreadySubscribed = false;
-            var redisPath = FormatPath(host, channel);
+            var kafkaPath = FormatPath(host.ToString(), channel);
 
             if (_subByTopicId.TryGetValue(topicId, out SubInfo subInfo))
             {
@@ -45,12 +45,12 @@ namespace kafka_rtd
             }
             else
             {
-                subInfo = new SubInfo(topicId, redisPath);
+                subInfo = new SubInfo(topicId, kafkaPath);
                 subInfo.AddField(field);
                 _subByTopicId[topicId] = subInfo;
             }
 
-            _subByKafkaPath[redisPath] = subInfo;
+            _subByKafkaPath[kafkaPath] = subInfo;
             _subByTopicPath[topicPath] = subInfo;
 
             return alreadySubscribed;
@@ -69,7 +69,10 @@ namespace kafka_rtd
 
         public object GetValue(int topicId)
         {
-            return _subByTopicId[topicId]?.Value;
+            if (_subByTopicId.TryGetValue(topicId, out SubInfo sub))
+                return sub.Value;
+
+            return UninitializedValue;
         }
 
         public List<UpdatedValue> GetUpdatedValues()

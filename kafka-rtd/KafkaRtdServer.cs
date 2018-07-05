@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using NLog;
+using Confluent.Kafka;
+using Confluent.Kafka.Serialization;
 
 namespace kafka_rtd
 {
@@ -24,6 +26,7 @@ namespace kafka_rtd
         object _notifyLock = new object();
         object _syncLock = new object();
         int _lastRtdTopic = -1;
+        //private Dictionary<Uri, BrokerRouter> _kafkaConnect = new Dictionary<Uri, BrokerRouter>();
 
         private const string LAST_RTD = "LAST_RTD";
 
@@ -54,17 +57,6 @@ namespace kafka_rtd
                     Console.WriteLine(ex.Message);
                 }
             });
-
-            // We will throttle out updates so that Excel can keep up.
-            // It is also important to invoke the Excel callback notify
-            // function from the COM thread. System.Windows.Threading' 
-            // DispatcherTimer will use COM thread's message pump.
-            //DispatcherTimer dispatcherTimer = new DispatcherTimer();
-            //_timer = dispatcherTimer;
-            //_timer.Interval = TimeSpan.FromMilliseconds(95); // this needs to be very frequent
-            //_timer.Tick += TimerElapsed;
-            //_timer.Start();
-
             return 1;
         }
 
@@ -92,59 +84,70 @@ namespace kafka_rtd
                         _lastRtdTopic = topicId;
                         return DateTime.Now.ToLocalTime();
                 }
-                return "ERROR: Expected: LAST_RTD or host, name, field";
+                return "ERROR: Expected: LAST_RTD or host, topic, field";
             }
             else if (strings.Length >= 2)
             {
                 // Crappy COM-style arrays...
                 string host = strings.GetValue(0).ToString().ToUpperInvariant();
-                string channel = strings.GetValue(1).ToString();
+                string topic = strings.GetValue(1).ToString();
                 string field = strings.Length > 2 ? strings.GetValue(2).ToString() : "";
 
-                return SubscribeRedis(topicId, host, channel, field);
+                return Subscribe(topicId, host, topic, field);
             }
-
-            return "ERROR: Expected: LAST_RTD or host, key, field";
+            return "ERROR: Expected: LAST_RTD or host, topic, field";
         }
-        private object SubscribeRedis(int topicId, string host, string channel, string field)
+
+        private object Subscribe(int topicId, string host, string topic, string field)
         {
-            if (String.IsNullOrEmpty(channel))
-                return "<channel required>";
-
-            if (_subMgr.Subscribe(topicId, host, channel, field))
-                return _subMgr.GetValue(topicId); // already subscribed 
-
-            //Logger.Debug(channel);
             try
             {
-                //_redisSubscriber.Subscribe(channel, (chan, message) => {
-                //    var rtdSubTopic = SubscriptionManager.FormatPath(host, chan);
-                //    try
+                if (String. IsNullOrEmpty(topic))
+                    return "<topic required>";
+
+                //    Uri hostUri = new Uri(host);
+                //    if (!_kafkaConnect.TryGetValue(hostUri, out BrokerRouter router))
                 //    {
-                //        var str = message.ToString();
-                //        _subMgr.Set(rtdSubTopic, str);
+                //        var options = new KafkaOptions(hostUri);
+                //        router = new BrokerRouter(options);
+                //        _kafkaConnect[hostUri] = router;
+                //    }
+                //    if (_subMgr.Subscribe(topicId, hostUri, topic, field))
+                //        return _subMgr.GetValue(topicId); // already subscribed 
 
-                //        if (str.StartsWith("{"))
+                //    var rtdSubTopic = SubscriptionManager.FormatPath(host, topic);
+                //    var consumer = new Consumer(new ConsumerOptions(topic, router));
+                //    foreach (var message in consumer.Consume())
+                //    {
+                //        try
                 //        {
-                //            var jo = JsonConvert.DeserializeObject<Dictionary<String, object>>(str);
+                //            Console.WriteLine("Response: P{0},O{1} : {2}",
+                //                message.Meta.PartitionId, message.Meta.Offset, message.Value);
 
-                //            lock (_syncLock)
+                //            var str = message.Value.ToString();
+                //            _subMgr.Set(rtdSubTopic, str);
+
+                //            if (str.StartsWith("{"))
                 //            {
-                //                foreach (string field_in in jo.Keys)
-                //                {
-                //                    var rtdTopicString = SubscriptionManager.FormatPath(host, channel, field_in);
-                //                    object val = jo[field_in];
+                //                var jo = JsonConvert.DeserializeObject<Dictionary<String, object>>(str);
 
-                //                    _subMgr.Set(rtdTopicString, val);
+                //                lock (_syncLock)
+                //                {
+                //                    foreach (string field_in in jo.Keys)
+                //                    {
+                //                        var rtdTopicString = SubscriptionManager.FormatPath(host, topic, field_in);
+                //                        object val = jo[field_in];
+
+                //                        _subMgr.Set(rtdTopicString, val);
+                //                    }
                 //                }
-                //            } 
+                //            }
+                //        }
+                //        catch (Exception ex)
+                //        {
+                //            _subMgr.Set(rtdSubTopic, ex.Message);
                 //        }
                 //    }
-                //    catch (Exception ex)
-                //    {
-                //        _subMgr.Set(rtdSubTopic, ex.Message);
-                //    }
-                //});
             }
             catch (Exception ex)
             {
