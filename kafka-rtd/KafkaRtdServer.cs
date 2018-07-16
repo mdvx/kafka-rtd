@@ -5,6 +5,9 @@ using System.Runtime.InteropServices;
 using NLog;
 using Confluent.Kafka;
 using Confluent.Kafka.Serialization;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace kafka_rtd
 {
@@ -19,6 +22,7 @@ namespace kafka_rtd
         private static readonly ILogger Logger = LogManager.GetCurrentClassLogger();
 
         IRtdUpdateEvent _callback;
+        ILogger Log = LogManager.GetCurrentClassLogger();
 
         //DispatcherTimer _timer;
         SubscriptionManager _subMgr;
@@ -72,30 +76,39 @@ namespace kafka_rtd
                                        ref Array strings,
                                        ref bool newValues)
         {
-            newValues = true;
-
-            if (strings.Length == 1)
+            try
             {
-                string host = strings.GetValue(0).ToString().ToUpperInvariant();
+                newValues = true;
 
-                switch (host)
+                if (strings.Length == 1)
                 {
-                    case LAST_RTD:
-                        _lastRtdTopic = topicId;
-                        return DateTime.Now.ToLocalTime();
+                    string host = strings.GetValue(0).ToString().ToUpperInvariant();
+
+                    switch (host)
+                    {
+                        case LAST_RTD:
+                            _lastRtdTopic = topicId;
+                            return DateTime.Now.ToLocalTime();
+                    }
+                    return "ERROR: Expected: LAST_RTD or host, topic, field";
+                }
+                else if (strings.Length >= 2)
+                {
+                    // Crappy COM-style arrays...
+                    string host = strings.GetValue(0).ToString().ToUpperInvariant();
+                    string topic = strings.GetValue(1).ToString();
+                    string field = strings.Length > 2 ? strings.GetValue(2).ToString() : "";
+
+                    return Subscribe(topicId, host, topic, field);
                 }
                 return "ERROR: Expected: LAST_RTD or host, topic, field";
-            }
-            else if (strings.Length >= 2)
-            {
-                // Crappy COM-style arrays...
-                string host = strings.GetValue(0).ToString().ToUpperInvariant();
-                string topic = strings.GetValue(1).ToString();
-                string field = strings.Length > 2 ? strings.GetValue(2).ToString() : "";
 
-                return Subscribe(topicId, host, topic, field);
             }
-            return "ERROR: Expected: LAST_RTD or host, topic, field";
+            catch (Exception ex)
+            {
+                Log.Error(ex);
+                return ex.Message;
+            }
         }
 
         private object Subscribe(int topicId, string host, string topic, string field)
@@ -105,13 +118,48 @@ namespace kafka_rtd
                 if (String. IsNullOrEmpty(topic))
                     return "<topic required>";
 
-                //    Uri hostUri = new Uri(host);
-                //    if (!_kafkaConnect.TryGetValue(hostUri, out BrokerRouter router))
-                //    {
-                //        var options = new KafkaOptions(hostUri);
-                //        router = new BrokerRouter(options);
-                //        _kafkaConnect[hostUri] = router;
-                //    }
+                //Uri hostUri = new Uri(host);
+                //if (!_kafkaConnect.TryGetValue(hostUri, out BrokerRouter router))
+                //{
+                //    var options = new KafkaOptions(hostUri);
+                //    router = new BrokerRouter(options);
+                //    _kafkaConnect[hostUri] = router;
+                //}
+
+                CancellationTokenSource cts = new CancellationTokenSource();
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var conf = new Dictionary<string, object>
+                        {
+                          { "group.id", "test-consumer-group" },
+                          { "bootstrap.servers", "localhost:9092" },
+                          { "auto.commit.interval.ms", 5000 },
+                          { "auto.offset.reset", "earliest" }
+                        };
+
+                        using (var consumer = new Consumer<Null, string>(conf, null, new StringDeserializer(Encoding.UTF8)))
+                        {
+                            consumer.OnMessage += (_, msg) => Console.WriteLine($"Read '{msg.Value}' from: {msg.TopicPartitionOffset}");
+                            consumer.OnError += (_, error) => Console.WriteLine($"Error: {error}");
+                            consumer.OnConsumeError += (_, msg) => Console.WriteLine($"Consume error ({msg.TopicPartitionOffset}): {msg.Error}");
+
+                            consumer.Subscribe(topic);
+                            while (!cts.Token.IsCancellationRequested)
+                            {
+                                consumer.Poll(TimeSpan.FromMilliseconds(100));
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex);
+                    }
+                });
+                return SubscriptionManager.UninitializedValue;
+
+
                 //    if (_subMgr.Subscribe(topicId, hostUri, topic, field))
                 //        return _subMgr.GetValue(topicId); // already subscribed 
 
@@ -151,6 +199,7 @@ namespace kafka_rtd
             }
             catch (Exception ex)
             {
+                Log.Error(ex);
                 _subMgr.Set(topicId, ex.Message);
             }
             return _subMgr.GetValue(topicId);

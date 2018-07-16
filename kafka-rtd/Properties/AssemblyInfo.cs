@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("kafka-rtd")]
-[assembly: AssemblyCopyright("Copyright ©  2018 Marc Deveaux")]
+[assembly: AssemblyCopyright("Copyright © 2018 Marc Deveaux")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
