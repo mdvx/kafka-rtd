@@ -11,6 +11,8 @@ namespace kakfa_test
     {
         private static readonly ILogger Logger = LogManager.GetCurrentClassLogger();
 
+        static Random random = new Random();
+
         static void Main(string[] args)
         {
 
@@ -25,13 +27,34 @@ namespace kakfa_test
 
                 using (var producer = new Producer<Null, string>(config, null, new StringSerializer(Encoding.UTF8)))
                 {
+                    int l = 0;
+
+                    int r = 200;
+                    var padding = new String('x', r);
+
                     while (true)
                     {
-                        var dr = producer.ProduceAsync("JSON_1", null, "test message text").Result;
-                        Logger.Info($"Delivered '{dr.Value}' to: {dr.TopicPartitionOffset}");
+                        l++;
 
-                        //var dr = producer.ProduceAsync("JSON_2", null, "test message text").Result;
-                        //var dr = producer.ProduceAsync("JSON_3", null, "test message text").Result;
+                        var topic = $"JSON_0";
+                        var str = $"{{ \"topic\": \"{topic}\", \"FIELD\": {l}, \"len\": {r}, \"padding\": \"{padding}\"}}";
+
+                        // Calling .Result on the asynchronous produce request below causes it to
+                        // block until it completes. Generally, you should avoid producing
+                        // synchronously because this has a huge impact on throughput. 
+                        var dr = producer.ProduceAsync(topic, null, str);
+
+                        if (l % 1000 == 0)
+                        {
+                            producer.Flush(TimeSpan.FromSeconds(10));
+                            Logger.Info("sent " + str.Substring(0, Math.Min(75, str.Length)));
+
+                            var d = random.NextDouble();
+                            var e = random.Next(5);
+                            r = (int)(d * Math.Pow(10, e)) + 1;  // r should fall between 0 and 4*100,000
+
+                            padding = new String('x', r);
+                        }
                     }
                 }
             }

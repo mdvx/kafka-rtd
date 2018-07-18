@@ -72,9 +72,7 @@ namespace kafka_rtd
         // Excel calls this when it wants to make a new topic subscription.
         // topicId becomes the key representing the subscription.
         // String array contains any aux data user provides to RTD macro.
-        object IRtdServer.ConnectData (int topicId,
-                                       ref Array strings,
-                                       ref bool newValues)
+        object IRtdServer.ConnectData (int topicId, ref Array strings, ref bool newValues)
         {
             try
             {
@@ -118,13 +116,16 @@ namespace kafka_rtd
                 if (String. IsNullOrEmpty(topic))
                     return "<topic required>";
 
-                //Uri hostUri = new Uri(host);
+                Uri hostUri = new Uri(host);
                 //if (!_kafkaConnect.TryGetValue(hostUri, out BrokerRouter router))
                 //{
-                //    var options = new KafkaOptions(hostUri);
-                //    router = new BrokerRouter(options);
                 //    _kafkaConnect[hostUri] = router;
                 //}
+                if (_subMgr.Subscribe(topicId, hostUri, topic, field))
+                    return _subMgr.GetValue(topicId); // already subscribed 
+
+                var rtdSubTopic = SubscriptionManager.FormatPath(host, topic);
+                var rtdTopicString = SubscriptionManager.FormatPath(host, topic, field);
 
                 CancellationTokenSource cts = new CancellationTokenSource();
                 Task.Run(() =>
@@ -134,16 +135,20 @@ namespace kafka_rtd
                         var conf = new Dictionary<string, object>
                         {
                           { "group.id", "test-consumer-group" },
-                          { "bootstrap.servers", "localhost:9092" },
+                          { "bootstrap.servers", host },
                           { "auto.commit.interval.ms", 5000 },
                           { "auto.offset.reset", "earliest" }
                         };
 
                         using (var consumer = new Consumer<Null, string>(conf, null, new StringDeserializer(Encoding.UTF8)))
                         {
-                            consumer.OnMessage += (_, msg) => Console.WriteLine($"Read '{msg.Value}' from: {msg.TopicPartitionOffset}");
-                            consumer.OnError += (_, error) => Console.WriteLine($"Error: {error}");
-                            consumer.OnConsumeError += (_, msg) => Console.WriteLine($"Consume error ({msg.TopicPartitionOffset}): {msg.Error}");
+                            consumer.OnMessage += (_, msg) => _subMgr.Set(rtdTopicString, msg.Value);
+                            consumer.OnError += (_, error) => _subMgr.Set(rtdTopicString, error.Reason);
+                            consumer.OnConsumeError += (_, msg) => _subMgr.Set(rtdTopicString, $"Consume error ({msg.TopicPartitionOffset}): {msg.Error}");
+                            consumer.OnOffsetsCommitted += (_, commit) => Log.Log(commit.Error ? LogLevel.Error : LogLevel.Info, commit.Error
+                                    ? $"Failed to commit offsets: {commit.Error}"
+                                    : $"Successfully committed offsets: [{string.Join(", ", commit.Offsets)}]");
+                            consumer.OnStatistics += (_, json) => Log.Info($"Statistics: {json}");
 
                             consumer.Subscribe(topic);
                             while (!cts.Token.IsCancellationRequested)
@@ -160,10 +165,7 @@ namespace kafka_rtd
                 return SubscriptionManager.UninitializedValue;
 
 
-                //    if (_subMgr.Subscribe(topicId, hostUri, topic, field))
-                //        return _subMgr.GetValue(topicId); // already subscribed 
 
-                //    var rtdSubTopic = SubscriptionManager.FormatPath(host, topic);
                 //    var consumer = new Consumer(new ConsumerOptions(topic, router));
                 //    foreach (var message in consumer.Consume())
                 //    {
