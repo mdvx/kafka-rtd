@@ -30,9 +30,10 @@ namespace kafka_rtd
         object _notifyLock = new object();
         object _syncLock = new object();
         int _lastRtdTopic = -1;
-        //private Dictionary<Uri, BrokerRouter> _kafkaConnect = new Dictionary<Uri, BrokerRouter>();
+        private Dictionary<Uri, Consumer<Null, string>> _kafkaConsumers = new Dictionary<Uri, Consumer<Null, string>>();
 
         private const string LAST_RTD = "LAST_RTD";
+        private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
 
         public KafkaRtdServer()
         {
@@ -68,6 +69,7 @@ namespace kafka_rtd
         void IRtdServer.ServerTerminate ()
         {
             _callback = null;
+            _cancellationTokenSource.Cancel();
         }
         // Excel calls this when it wants to make a new topic subscription.
         // topicId becomes the key representing the subscription.
@@ -113,91 +115,91 @@ namespace kafka_rtd
         {
             try
             {
-                if (String. IsNullOrEmpty(topic))
+                if (String.IsNullOrEmpty(topic))
                     return "<topic required>";
 
                 Uri hostUri = new Uri(host);
-                //if (!_kafkaConnect.TryGetValue(hostUri, out BrokerRouter router))
-                //{
-                //    _kafkaConnect[hostUri] = router;
-                //}
                 if (_subMgr.Subscribe(topicId, hostUri, topic, field))
                     return _subMgr.GetValue(topicId); // already subscribed 
 
                 var rtdSubTopic = SubscriptionManager.FormatPath(host, topic);
-                var rtdTopicString = SubscriptionManager.FormatPath(host, topic, field);
 
-                CancellationTokenSource cts = new CancellationTokenSource();
                 Task.Run(() =>
                 {
                     try
                     {
-                        var conf = new Dictionary<string, object>
+                        if (!_kafkaConsumers.TryGetValue(hostUri, out Consumer<Null, string> consumer))
                         {
-                          { "group.id", "test-consumer-group" },
-                          { "bootstrap.servers", host },
-                          { "auto.commit.interval.ms", 5000 },
-                          { "auto.offset.reset", "earliest" }
-                        };
-
-                        using (var consumer = new Consumer<Null, string>(conf, null, new StringDeserializer(Encoding.UTF8)))
-                        {
-                            consumer.OnMessage += (_, msg) => _subMgr.Set(rtdTopicString, msg.Value);
-                            consumer.OnError += (_, error) => _subMgr.Set(rtdTopicString, error.Reason);
-                            consumer.OnConsumeError += (_, msg) => _subMgr.Set(rtdTopicString, $"Consume error ({msg.TopicPartitionOffset}): {msg.Error}");
-                            consumer.OnOffsetsCommitted += (_, commit) => Log.Log(commit.Error ? LogLevel.Error : LogLevel.Info, commit.Error
-                                    ? $"Failed to commit offsets: {commit.Error}"
-                                    : $"Successfully committed offsets: [{string.Join(", ", commit.Offsets)}]");
-                            consumer.OnStatistics += (_, json) => Log.Info($"Statistics: {json}");
-
-                            consumer.Subscribe(topic);
-                            while (!cts.Token.IsCancellationRequested)
+                            //var rtdTopicString = SubscriptionManager.FormatPath(host, topic, field);
+                            var conf = new Dictionary<string, object>
                             {
-                                consumer.Poll(TimeSpan.FromMilliseconds(100));
-                            }
+                                { "group.id", "test-consumer-group" },
+                                { "bootstrap.servers", host },
+                                //{ "metadata.max.age.ms", 10000 },
+                                { "auto.commit.interval.ms", 5000 },
+                                { "auto.offset.reset", "earliest" }
+                            };
+
+                            consumer = new Consumer<Null, string>(conf, null, new StringDeserializer(Encoding.UTF8));
+                            consumer.OnMessage += (_, msg) =>
+                            {
+                                try
+                                {
+                                    var str = msg.Value;
+                                    _subMgr.Set(rtdSubTopic, str);
+
+                                    if (str.StartsWith("{"))
+                                    {
+                                        var jo = JsonConvert.DeserializeObject<Dictionary<String, object>>(str);
+
+                                        lock (_syncLock)
+                                        {
+                                            foreach (string field_in in jo.Keys)
+                                            {
+                                                var rtdTopicString = SubscriptionManager.FormatPath(host, topic, field_in);
+                                                object val = jo[field_in];
+                                                _subMgr.Set(rtdTopicString, val);
+                                            }
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _subMgr.Set(rtdSubTopic, ex.Message);
+                                }
+                            };
+                            consumer.OnError += (_, error) => _subMgr.Set(rtdSubTopic, error.Reason);
+                            consumer.OnConsumeError += (_, msg) => _subMgr.Set(rtdSubTopic, $"Consume error ({msg.TopicPartitionOffset}): {msg.Error}");
+                            //consumer.OnOffsetsCommitted += (_, commit) => Log.Log(commit.Error ? LogLevel.Error : LogLevel.Info, commit.Error
+                            //        ? $"Failed to commit offsets: {commit.Error}"
+                            //        : $"Successfully committed offsets: [{string.Join(", ", commit.Offsets)}]");
+                            //consumer.OnStatistics += (_, json) => Log.Info($"Statistics: {json}");
+
+                            _kafkaConsumers[hostUri] = consumer;
+                        }
+
+                        consumer.Subscribe(topic);
+                        while (!_cancellationTokenSource.Token.IsCancellationRequested)
+                        {
+                            consumer.Poll(TimeSpan.FromMilliseconds(100));
                         }
                     }
                     catch (Exception ex)
                     {
                         Log.Error(ex);
+                        _subMgr.Set(rtdSubTopic,ex.Message);
+                    }
+                    finally
+                    {
+                        if (_kafkaConsumers.TryGetValue(hostUri, out Consumer<Null, string> consumer))
+                        {
+                            //if (consumer.)
+                            //_kafkaConsumers.Remove(hostUri);
+                            //consumer.Dispose();
+                        }
                     }
                 });
                 return SubscriptionManager.UninitializedValue;
-
-
-
-                //    var consumer = new Consumer(new ConsumerOptions(topic, router));
-                //    foreach (var message in consumer.Consume())
-                //    {
-                //        try
-                //        {
-                //            Console.WriteLine("Response: P{0},O{1} : {2}",
-                //                message.Meta.PartitionId, message.Meta.Offset, message.Value);
-
-                //            var str = message.Value.ToString();
-                //            _subMgr.Set(rtdSubTopic, str);
-
-                //            if (str.StartsWith("{"))
-                //            {
-                //                var jo = JsonConvert.DeserializeObject<Dictionary<String, object>>(str);
-
-                //                lock (_syncLock)
-                //                {
-                //                    foreach (string field_in in jo.Keys)
-                //                    {
-                //                        var rtdTopicString = SubscriptionManager.FormatPath(host, topic, field_in);
-                //                        object val = jo[field_in];
-
-                //                        _subMgr.Set(rtdTopicString, val);
-                //                    }
-                //                }
-                //            }
-                //        }
-                //        catch (Exception ex)
-                //        {
-                //            _subMgr.Set(rtdSubTopic, ex.Message);
-                //        }
-                //    }
             }
             catch (Exception ex)
             {
@@ -209,6 +211,14 @@ namespace kafka_rtd
         // Excel calls this when it wants to cancel subscription.
         void IRtdServer.DisconnectData (int topicId)
         {
+            //SubscriptionManager.SubInfo sub = _subMgr.GetSub(topicId);
+            //Uri hostUri = new Uri(sub.Host);
+            //if (_kafkaConsumers.TryGetValue(hostUri, out Consumer<Null, string> consumer))
+            //{
+            //    //if (consumer.count<=0)
+            //    _kafkaConsumers.Remove(hostUri);
+            //    consumer.Dispose();
+            //}
             _subMgr.Unsubscribe(topicId);
         }
         // Excel calls this every once in a while.

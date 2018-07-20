@@ -45,7 +45,7 @@ namespace kafka_rtd
             }
             else
             {
-                subInfo = new SubInfo(topicId, kafkaPath);
+                subInfo = new SubInfo(topicId, host, kafkaPath);
                 subInfo.AddField(field);
                 _subByTopicId[topicId] = subInfo;
             }
@@ -142,19 +142,21 @@ namespace kafka_rtd
         public class SubInfo
         {
             public int TopicId { get; private set; }
+            public Uri HostUri { get; private set; }
             public string Path { get; private set; }
             public HashSet<string> Fields { get; private set; }
 
             public object Value { get; set; }
 
-            public SubInfo(int topicId, string path, object value)
+            public SubInfo(int topicId, Uri hostUri, string path, object value)
             {
                 TopicId = topicId;
+                HostUri = hostUri;
                 Path = path;
                 Value = value;
                 Fields = new HashSet<string>();
             }
-            public SubInfo(int topicId, string path) : this(topicId, path, UninitializedValue)
+            public SubInfo(int topicId, Uri hostUri, string path) : this(topicId, hostUri, path, UninitializedValue)
             {
             }
             public void AddField(string field)
@@ -163,7 +165,7 @@ namespace kafka_rtd
             }
             public override string ToString()
             {
-                return $"SubInfo topic={TopicId} path={Path} value={Value}";
+                return $"SubInfo topic={TopicId} host={HostUri} path={Path} value={Value}";
             }
         }
         public struct UpdatedValue
