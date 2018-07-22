@@ -68,7 +68,6 @@ namespace kafka_rtd
         // Excel calls this when it wants to shut down RTD server.
         void IRtdServer.ServerTerminate ()
         {
-            _callback = null;
             _cancellationTokenSource.Cancel();
         }
         // Excel calls this when it wants to make a new topic subscription.
