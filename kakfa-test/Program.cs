@@ -20,10 +20,11 @@ namespace kakfa_test
 
             try
             {
-                Logger.Info("Start Main");
+                Logger.Info("Start kakfa_test");
 
                 var config = new Dictionary<string, object>()
                 {
+                    { "group.id", "test-consumer-group" },
                     { "bootstrap.servers", "localhost:9092" }
                 };
 
@@ -48,7 +49,8 @@ namespace kakfa_test
                         l++;
                         for (int i = 0; i < str.Length; i++)
                         {
-                            var dr = producer.ProduceAsync(topic[i], null, str[i]);
+                            var res = producer.ProduceAsync(topic[i], null, str[i]);
+                            //Logger.Error(res.Error);
                         }
 
                         //producer.Flush(TimeSpan.FromSeconds(1));

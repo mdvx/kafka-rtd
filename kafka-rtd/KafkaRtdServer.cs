@@ -95,7 +95,7 @@ namespace kafka_rtd
                 else if (strings.Length >= 2)
                 {
                     // Crappy COM-style arrays...
-                    string host = strings.GetValue(0).ToString().ToUpperInvariant();
+                    string host = strings.GetValue(0).ToString();
                     string topic = strings.GetValue(1).ToString();
                     string field = strings.Length > 2 ? strings.GetValue(2).ToString() : "";
 
